@@ -141,6 +141,25 @@ def _download_from_github(repo: str, download_path: Path, filename: str, progres
     extractall(filepath=filepath, output_dir=download_path, has_base=True)
 
 
+def _download_from_huggingface(repo: str, download_path: Path, filename: str, progress: bool = True):
+    from huggingface_hub import snapshot_download
+
+    if '#' in filename:
+        repo_name, revision = filename.split('#')
+    else:
+        repo_name, revision = filename, "main"
+    snapshot_dir = snapshot_download(
+        repo_id=f"{repo}/{repo_name}",
+        revision=revision,
+        library_name=repo_name,
+    )
+    dst = os.path.join(download_path, repo_name)
+    os.makedirs(download_path, exist_ok=True)
+    if os.path.exists(dst):
+        os.remove(dst)
+    os.symlink(snapshot_dir, dst)
+
+
 def _process_bundle_dir(bundle_dir: Optional[PathLike] = None):
     if bundle_dir is None:
         get_dir, has_home = optional_import("torch.hub", name="get_dir")
@@ -183,6 +202,11 @@ def download(
         # then do the following command for downloading:
         python -m monai.bundle download --args_file "args.json" --source "github"
 
+        # Downloading from the Huggingface hub is also supported.  The
+        # following example will download the "brats_mri_segmentation"
+        # from the "dnouri" organization:
+        python -m monai.bundle download --name "brats_mri_segmentation" --source "huggingface" --repo "dnouri"
+
     Args:
         name: bundle name. If `None` and `url` is `None`, it must be provided in `args_file`.
         bundle_dir: target directory to store the downloaded data.
@@ -221,6 +245,10 @@ def download(
         if name_ is None:
             raise ValueError(f"To download from source: Github, `name` must be provided, got {name_}.")
         _download_from_github(repo=repo_, download_path=bundle_dir_, filename=name_, progress=progress_)
+    elif source == "huggingface":
+        if name_ is None:
+            raise ValueError(f"To download from source: huggingface, `name` must be provided, got {name_}.")
+        _download_from_huggingface(repo=repo_, download_path=bundle_dir_, filename=name_, progress=progress_)
     else:
         raise NotImplementedError(
             f"Currently only download from provided URL in `url` or Github is implemented, got source: {source_}."
