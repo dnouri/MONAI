@@ -10,7 +10,7 @@
 # limitations under the License.
 
 
-from monai.bundle.scripts import ckpt_export, download, init_bundle, run, verify_metadata, verify_net_in_out
+from monai.bundle.scripts import ckpt_export, download, init_bundle, run, verify_metadata, verify_net_in_out, upload_zoo_bundle_to_hf
 
 if __name__ == "__main__":
     from monai.utils import optional_import

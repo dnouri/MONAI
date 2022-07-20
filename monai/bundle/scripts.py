@@ -730,3 +730,71 @@ def init_bundle(
         copyfile(str(ckpt_file), str(models_dir / "model.pt"))
     elif network is not None:
         save_state(network, str(models_dir / "model.pt"))
+
+
+def upload_zoo_bundle_to_hf(
+    name: str,
+    hf_organization: str,
+    hf_token: Optional[str] = None,
+    hf_card_data: Optional[str] = None,
+    bundle_dir: Optional[PathLike] = None,
+    source: str = "github",
+    repo: str = "Project-MONAI/model-zoo/hosting_storage_v1",
+    url: Optional[str] = None,
+    progress: bool = True,
+    args_file: Optional[str] = None,
+):
+    from huggingface_hub import HfApi
+    from modelcards import CardData
+    hf_api = HfApi()
+
+    bundle_dir_ = _process_bundle_dir(bundle_dir)
+    download(
+        name=name,
+        bundle_dir=bundle_dir,
+        source=source,
+        repo=repo,
+        url=url,
+        progress=progress,
+        args_file=args_file,
+        )
+    name_sans_version = name.rsplit('_', 1)[0]
+    full_path = os.path.join(bundle_dir_, name_sans_version)
+
+    readme_src = os.path.join(full_path, 'docs', 'README.md')
+    readme_dst = os.path.join(full_path, 'README.md')
+    if os.path.exists(readme_src) and not os.path.exists(readme_dst):
+        os.rename(readme_src, readme_dst)
+        os.link(readme_dst, readme_src)
+
+    if hf_card_data:
+        hf_card_data = ast.literal_eval(hf_card_data)
+    else:
+        hf_card_data = {}
+    hf_card_data.setdefault("tags", ["MONAI"])
+    hf_card_data = CardData(**hf_card_data)
+
+    with open(readme_dst) as f:
+        readme_contents = f.read()
+    if not readme_contents.startswith('---'):
+        readme_contents = (
+            "---\n"
+            f"{hf_card_data.to_yaml()}\n"
+            "---\n"
+            f"{readme_contents}"
+            )
+        with open(readme_dst, 'w') as f:
+            f.write(readme_contents)
+
+    hf_api.create_repo(
+        repo_id=f"{hf_organization}/{name_sans_version}",
+        exist_ok=True,
+        token=hf_token,
+        )
+    hf_api.upload_folder(
+        repo_id=f"{hf_organization}/{name_sans_version}",
+        folder_path=full_path,
+        path_in_repo=".",
+        commit_message=f"Commit of {name} from {repo}",
+        token=hf_token,
+        )
